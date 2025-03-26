@@ -1,10 +1,11 @@
 class Lecture:
-    id = 1
-    def __init__(self, time, location):
-        self.lecture_id = Lecture.id
-        Lecture.id += 1
-        self.time = time
-        self.location = location
+    def __init__(self, id, start_time, end_time, day,weeks, venue):
+        self.id = id
+        self.start_time = start_time
+        self.end_time = end_time
+        self.day = day
+        self.weeks = weeks
+        self.venue = venue
     
-    def show(self):
-        return f"Lecture({self.lecture_id}, {self.time}, {self.location})"
+    def __str__(self):
+        return f"Lecture {self.id}: {self.day} {self.start_time}-{self.end_time} at {self.venue}, Weeks: {self.weeks}"
