@@ -33,10 +33,18 @@ def get_course_info(academic_year="2024-2025", code="CS3263",sem=1):
     if idx == -1:
         print(f"Data for {code} does not exist in semester {sem}")
         return None
-    
-    exam_date = data[i]["examDate"]
-    exam_duration = data[i]["examDuration"]
-    timetable = data[i]["timetable"]
+    try:
+        exam_date = data[i]["examDate"]
+        exam_duration = data[i]["examDuration"]
+    except Exception as e:
+        exam_date = None
+        exam_duration = None
+        print("No exam info found: ", e)
+    try:
+        timetable = data[i]["timetable"]
+    except Exception as e:
+        timetable = None
+        print("No timetable info found: ", e)
     
     return exam_date, exam_duration, timetable
 
