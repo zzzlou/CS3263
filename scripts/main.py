@@ -1,6 +1,9 @@
 import CSP
 from collections import defaultdict
 from Course_API import process_course
+import beam_search
+
+BEAM_WIDTH = 10
 
 def main():
     # Construct dictionary of permutations of states
@@ -44,5 +47,9 @@ def main():
     else:
         print("False")
     
+    # beam search
+    res = beam_search.search(list(domain.values()), BEAM_WIDTH, permutation_dict)
+    print(res)
+
 if __name__ == "__main__":
     main()
