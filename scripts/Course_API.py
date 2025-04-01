@@ -1,10 +1,7 @@
 from basic_info.Lecture import Lecture
 from basic_info.Tutorial import Tutorial
 from basic_info.Course import Course
-import CSP
 import requests
-from collections import defaultdict, deque
-import itertools
 
 def get_all_possible_courses(academic_year="2024-2025"):
     url = f"https://api.nusmods.com/v2/{academic_year}/moduleList.json"

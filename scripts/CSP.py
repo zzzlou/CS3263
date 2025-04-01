@@ -1,5 +1,3 @@
-from Course_API import get_course_info, parse_course_info, get_all_possible_courses, process_course
-
 class CSP:
     def __init__(self, variables, domains, neighbors, permu_dict):
         """

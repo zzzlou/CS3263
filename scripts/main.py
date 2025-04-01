@@ -1,10 +1,6 @@
-from basic_info.Lecture import Lecture
-from basic_info.Tutorial import Tutorial
-from basic_info.Course import Course
 import CSP
-from collections import defaultdict, deque
+from collections import defaultdict
 from Course_API import process_course
-
 
 def main():
     # Construct dictionary of permutations of states
@@ -39,15 +35,14 @@ def main():
         domain[var] = list(permutation_dict[var].keys())
     neighbors = {var: [v for v in variables if v != var] for var in variables}
     csp = CSP.CSP(variables, domain, neighbors, permutation_dict)
-    print(csp.domains)
     result = CSP.ac3(csp)
     if result:
-        print(csp.domains)
+        variables = csp.variables
+        domain = csp.domains
+        neighbors = csp.neighbors
+        print(domain)
     else:
         print("False")
     
-    
-
-
 if __name__ == "__main__":
     main()
