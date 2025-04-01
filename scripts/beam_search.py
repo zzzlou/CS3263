@@ -1,5 +1,5 @@
 import evaluate
-def search(state_spaces, beam_width, permutation_dict):
+def search(state_spaces, beam_width, permutation_dict, code_tuple):
     beam = [[]]
     for domain in state_spaces:
         new_beam = []
@@ -7,7 +7,7 @@ def search(state_spaces, beam_width, permutation_dict):
             for value in domain:
                 new_state = state + [value]
                 new_beam.append(new_state)
-        new_beam.sort(key=lambda state: evaluate.f(state, permutation_dict), reverse=True)
+        new_beam.sort(key=lambda state: evaluate.f(state, permutation_dict, code_tuple), reverse=True)
         beam = new_beam[:beam_width]
-    best_state = max(beam, key=lambda state: evaluate.f(state, permutation_dict))
+    best_state = max(beam, key=lambda state: evaluate.f(state, permutation_dict, code_tuple))
     return best_state

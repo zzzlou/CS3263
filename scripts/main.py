@@ -48,7 +48,7 @@ def main():
         print("False")
     
     # beam search
-    res = beam_search.search(list(domain.values()), BEAM_WIDTH, permutation_dict)
+    res = beam_search.search(list(domain.values()), BEAM_WIDTH, permutation_dict, code_order)
     print(res)
 
 if __name__ == "__main__":
