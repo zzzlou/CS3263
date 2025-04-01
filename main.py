@@ -69,26 +69,28 @@ def process_course(code):
     course = parse_course_info(code,exam_date,exam_duration,timetable)
     return course
 
-def ac3(domains, neighbors, constraint):
-    queue = deque([(xi, xj) for xi in domains for xj in neighbors.get(xi, [])])
-    while queue:
-        xi, xj = queue.popleft()
-        if remove_inconsistent_values(xi, xj, domains, constraint):
-            if not domains[xi]:
-                return False
-            for xk in neighbors.get(xi, []):
-                if xk != xj:
-                    queue.append((xk, xi))
-    return True
+def is_overlap(state, code_order, permutation_dict):
+    dict = {"Monday": [], "Tuesday": [], "Wednesday": [], "Thursday": [], "Friday": []}
+    for i in range(len(code_order)):
+        course_code = code_order[i]
+        ls_events = permutation_dict[course_code][state[i]]
+        for event in ls_events:
+            dict[event.day].append([event.start_time, event.end_time])
+    for key in dict.keys():
+        if len(dict[key]) == 0:
+            continue
+        
+        ls_time = dict[key]
+        ls_time = [[int(start), int(end)] for start, end in ls_time]
+        ls_time.sort(key=lambda x: x[0])
+        for i in range(1, len(ls_time)):
+            prev_end = ls_time[i - 1][1]
+            curr_start = ls_time[i][0]
+            if curr_start < prev_end:
+                return True
 
-def remove_inconsistent_values(xi, xj, domains, constraint):
-    removed = False
-    # Iterate over a copy of the domain list for safe removal.
-    for x in domains[xi][:]:
-        if not any(constraint(xi, x, xj, y) for y in domains[xj]):
-            domains[xi].remove(x)
-            removed = True
-    return removed
+    return False
+
 
 def main():
     # Construct dictionary of permutations of states
@@ -122,9 +124,10 @@ def main():
     print(state_space)
 
     # Remove time-overlapped states
-    state_space = tuple(filter(lambda x: not is_overlap(x), state_space))
+    state_space = list(filter(lambda x: not is_overlap(x, code_order, permutation_dict), state_space))
+    print(state_space)
     
-        
+    # Remove space_caused 
 
 
 if __name__ == "__main__":
