@@ -1,8 +1,9 @@
-
 from basic_info.Lecture import Lecture
 from basic_info.Tutorial import Tutorial
 from basic_info.Course import Course
 import requests
+from collections import defaultdict, deque
+import itertools
 
 def get_all_possible_courses(academic_year="2024-2025"):
     url = f"https://api.nusmods.com/v2/{academic_year}/moduleList.json"
@@ -73,14 +74,66 @@ def process_course(code):
     course = parse_course_info(code,exam_date,exam_duration,timetable)
     return course
 
+def is_overlap(state, code_order, permutation_dict):
+    dict = {"Monday": [], "Tuesday": [], "Wednesday": [], "Thursday": [], "Friday": []}
+    for i in range(len(code_order)):
+        course_code = code_order[i]
+        ls_events = permutation_dict[course_code][state[i]]
+        for event in ls_events:
+            dict[event.day].append([event.start_time, event.end_time])
+    for key in dict.keys():
+        if len(dict[key]) == 0:
+            continue
+        
+        ls_time = dict[key]
+        ls_time = [[int(start), int(end)] for start, end in ls_time]
+        ls_time.sort(key=lambda x: x[0])
+        for i in range(1, len(ls_time)):
+            prev_end = ls_time[i - 1][1]
+            curr_start = ls_time[i][0]
+            if curr_start < prev_end:
+                return True
+
+    return False
 
 
-
-if __name__ == "__main__":
+def main():
+    # Construct dictionary of permutations of states
     course_codes = input("Enter courses you would like to enrol in, separated by commas: ").split(",")
     courses = []
     for code in course_codes:
         code = code.upper()
         course = process_course(code)
         courses.append(course)
-    print(courses)
+    permutation_dict = {}
+    for course in courses:
+        dict = {}
+        lec_list = course.lectures
+        grouped_lecs = defaultdict(list)
+        for lec in lec_list:
+            grouped_lecs[lec.id].append(lec)
+        new_lec_list = list(grouped_lecs.values())
+        tut_list = course.tutorials
+        permutations = []
+        for lec in new_lec_list:
+            for tut in tut_list:
+                permutations.append(lec + [tut])
+        for i in range(len(permutations)):
+            dict[i] = permutations[i]
+        permutation_dict[course.code] = dict
+    code_order = tuple(permutation_dict.keys())
+    
+    # print initial state space
+    ls = list(map(lambda x: list(permutation_dict[x].keys()), list(code_order)))
+    state_space = list(itertools.product(*ls))
+    print(state_space)
+
+    # Remove time-overlapped states
+    state_space = list(filter(lambda x: not is_overlap(x, code_order, permutation_dict), state_space))
+    print(state_space)
+    
+    # Remove space_caused 
+
+
+if __name__ == "__main__":
+    main()
