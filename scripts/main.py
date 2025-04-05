@@ -51,5 +51,20 @@ def main():
     res = beam_search.search(list(domain.values()), BEAM_WIDTH, permutation_dict, code_order)
     print(res)
 
+    #calculate_attendance
+    def calculate_attendance(permutation_dict, courses, state, person: AttendanceBehavior):
+        schedule = []
+        
+        for i, course in enumerate(courses):
+            course_code = course.code
+            selected_permutation = permutation_dict[course_code][state[i]]
+            for session in selected_permutation:
+                schedule.append((session, session.start_time))
+        
+        schedule.sort(key=lambda x: x[1])
+        return person.compute_attendance(schedule)
+
+    print(calculate_attendance(permutation_dict, courses, res, NormalPerson()))
+
 if __name__ == "__main__":
     main()
