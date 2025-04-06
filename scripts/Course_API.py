@@ -68,6 +68,9 @@ def parse_course_info(code, exam_date, exam_duaration, timetable):
     return course
     
 def process_course(code):
-    exam_date, exam_duration, timetable = get_course_info(code=code)
-    course = parse_course_info(code,exam_date,exam_duration,timetable)
+    try:
+        exam_date, exam_duration, timetable = get_course_info(code=code)
+        course = parse_course_info(code,exam_date,exam_duration,timetable)
+    except:
+        course = None
     return course
