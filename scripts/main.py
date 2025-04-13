@@ -12,7 +12,7 @@ BEAM_WIDTH = 10
 def main():
     # Construct dictionary of permutations of states
     # course_codes = input("Enter courses you would like to enrol in, separated by commas: ").split(",")
-    course_codes = ["CS2030","CS2040","CS2100"]
+    course_codes = ["CS3264", "CS3263", "CS4248"]
     courses = []
     for code in course_codes:
         code = code.upper()
@@ -49,19 +49,19 @@ def main():
         variables = csp.variables
         domain = csp.domains
         neighbors = csp.neighbors
-        # print(domain)
-        # print(permutation_dict)
+        print(domain)
+        print(permutation_dict)
     else:
         print("False")
     
     # beam search
-    res = beam_search.search(list(domain.values()), BEAM_WIDTH, permutation_dict, code_order)
-    print(res)
+    # res = beam_search.search(list(domain.values()), BEAM_WIDTH, permutation_dict, code_order)
+    # print(res)
 
-    Q = q_learning(domain,res,permutation_dict,verbose=True)
-
-    final_state = get_final_state(Q,res,domain,500)
-    print(f"final state according to learned q function: {final_state}")
+    # Q = q_learning(domain,res,permutation_dict,verbose=True)
+# 
+    # final_state = get_final_state(Q,res,domain,500)
+    # print(f"final state according to learned q function: {final_state}")
     # print(Q)
 
 
