@@ -61,9 +61,11 @@ def parse_course_info(code, exam_date, exam_duaration, timetable):
         if lesson_type == "Lecture":
             lecture = Lecture(id=class_no, start_time=start_time,end_time=end_time, day = day, weeks = weeks, venue = venue)
             lectures.append(lecture)
-        else:
+        elif lesson_type == "Tutorial":
             tutorial = Tutorial(id=class_no, start_time=start_time,end_time=end_time, day = day, weeks = weeks, venue = venue)
             tutorials.append(tutorial)
+        else:
+            continue
     course = Course(code, exam_date, exam_duaration, lectures, tutorials)
     return course
     
