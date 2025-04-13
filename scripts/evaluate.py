@@ -66,13 +66,18 @@ def f(state, permutation_dict, code_tuple, person_type): # person_type accepts "
     exhaustive_days = count_exhaustive_days(time) # How many days do I work for more than 6 hours (inclusive)?
 
     '''YOUR CODE HERE'''
-    #if person_type == "Lazy":
-    #    weights = [?, ?, ?, ?]
-    #elif person_type == "??":
-    #    weights = [?, ?, ?, ?]
-    #elif person_type == "???":
-    #    weights = [?, ?, ?, ?]
-    #...
+    if person_type == "Lazy":
+        weights = [0.5, 0.3, -0.1, -0.1]
+    elif person_type == "Hardworking":
+        weights = [0.1, -0.1, 0.2, 0.4]
+    elif person_type == "Balanced":
+        weights = [0.3, 0.2, -0.1, -0.1]
+    elif person_type == "EarlyBird":
+        weights = [0.2, 0.1, 0.5, -0.3]
+    elif person_type == "Chill":
+        weights = [0.6, 0.5, -0.4, -0.3]
+    else:
+        weights = [0.4, 0.3, -0.2, -0.2]
 #
     weights = [0.5, 0.3, -0.1, -0.1]  # Example weights for the Lazy person type
     return weights[0] * lunch_days + weights[1] * no_events_days + weights[2] * early_class_days + weights[3] * exhaustive_days
