@@ -259,7 +259,7 @@ if __name__ == "__main__":
     alpha = 1          # learning rate for Q–learning
     gamma = 0.99       # discount factor
     epsilon = 0.6      # exploration rate
-    update_reward_model_every = 10  # update every 10 episodes
+    update_reward_model_every = 5  # update every 10 episodes
     
     # Buffers to store trajectories for preference comparisons
     traj_buffer = []
