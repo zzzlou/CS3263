@@ -5,6 +5,7 @@ import beam_search
 from AttendanceBehavior import *
 import sys
 from Q_learning import q_learning, get_final_state
+import random
 
 
 BEAM_WIDTH = 10
@@ -12,7 +13,7 @@ BEAM_WIDTH = 10
 def main():
     # Construct dictionary of permutations of states
     # course_codes = input("Enter courses you would like to enrol in, separated by commas: ").split(",")
-    course_codes = ["CS3264", "CS3263", "CS4248"]
+    course_codes = ["CS1101S", "IS1108", "MA1521", "MA1522", "CS1231S"]
     courses = []
     for code in course_codes:
         code = code.upper()
@@ -49,14 +50,24 @@ def main():
         variables = csp.variables
         domain = csp.domains
         neighbors = csp.neighbors
-        print(domain)
-        print(permutation_dict)
+        # print(domain)
+        # print(permutation_dict)
     else:
         print("False")
-    
-    # beam search
-    # res = beam_search.search(list(domain.values()), BEAM_WIDTH, permutation_dict, code_order)
-    # print(res)
+
+    # Ultra Search (beam search, simulated annealing, 10 restarts)
+    initial_states = [] 
+    for i in range(10):
+        state = tuple(random.choice(domain[code]) for code in code_order)
+        while not beam_search.is_valid(state, permutation_dict, code_order):
+            state = tuple(random.choice(domain[code]) for code in code_order)
+        initial_states.append(state)
+    res = list(map(lambda x: beam_search.search(x, domain, permutation_dict, code_order, person_type="Lazy",
+                                                beam_width=10, max_iterations=1000, 
+                                                initial_temperature=200.0, cooling_rate=0.95)[0], initial_states))
+    res.sort(key=lambda x: x[1], reverse=True)
+    print(res[0])
+
 
     # Q = q_learning(domain,res,permutation_dict,verbose=True)
 # 
