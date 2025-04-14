@@ -15,7 +15,7 @@ class LazyPerson(AttendanceBehavior):
             if start_time == "0800":
                 continue
             elif prev_time is not None and int(start_time) - int(prev_time) > 300:
-                attended += 0.5
+                attended += 0.5 
             else:
                 attended += 0.8
             prev_time = start_time
