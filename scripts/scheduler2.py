@@ -7,80 +7,112 @@ import torch
 # ===============================
 # 简化版一天内课表环境，状态表示 s = (earliest_start, total_attended, gpa, fatigue, day)
 # ===============================
+import gym
+import numpy as np
+import random
+import torch
+import torch.nn as nn
+
 class SimpleCourseScheduleEnv(gym.Env):
     """
-    针对一天的课表环境，状态表示为：
-      s = (earliest_start, total_attended, gpa, fatigue, day)
-    其中：
-      - earliest_start: 当前已上课中最早的开始时间归一化到 [0,1]（如果未上课则为 1.0）
-      - total_attended: 累计上课时长（小时）
-      - gpa: 当前绩点
-      - fatigue: 当前疲劳值
-      - day: 当天标记（例如 0 表示星期一）
-      
-    环境依据传入的 day_schedule 来决策。day_schedule 为列表，例如：
-      [("ES2660", (9, 12), True), ("CS3263", (14, 15), True), ("CS2105", (17, 18), True)]
-    决策规则示例：
-      - 若选择上课 (action == 1)：
-            total_attended 增加持续时间；
-            如果目前没有上过课，earliest_start 更新为课程开始时间归一化值；
-            fatigue 增加 0.2*duration.
-      - 若选择不上课 (action == 0)：
-            fatigue 降低 0.1；
-            如果课程必修，有 70% 机率使 gpa 下降 0.1.
+    A simplified daily timetable environment where the state is defined as:
+      s = (gpa_level, fatigue_level, day, current_required, current_start_level)
+    
+    Here:
+      - gpa_level: Discrete GPA level (1: GPA < 3, 2: 3 ≤ GPA < 4, 3: 4 ≤ GPA < 5)
+      - fatigue_level: Discrete fatigue level (1, 2, or 3) computed from a continuous fatigue value
+      - day: Day of the week (e.g., 0 for Monday)
+      - current_required: Binary indicator for the upcoming course (1 if required, 0 otherwise)
+      - current_start_level: Discrete representation of the current course's start time:
+            1 for courses starting before 10 AM,
+            2 for courses starting between 10 AM and 14 PM,
+            3 for courses starting at or after 14 PM.
+    
+    The environment uses the given day_schedule (a list of tuples, e.g.,
+       [("ES2660", (9, 12), True), ("CS3263", (14, 15), True), ("CS2105", (17, 18), True)])
+    to simulate daily attendance decisions.
     """
-    def __init__(self, day_schedule, day=0, reward_model = None):
+    def __init__(self, day_schedule, day=0, reward_model=None):
         super().__init__()
         self.day_schedule = day_schedule
         self.num_courses = len(day_schedule)
         self.day = day
-        self.action_space = gym.spaces.Discrete(2)  # 0: 不上课, 1: 上课
+        self.action_space = gym.spaces.Discrete(2)  # 0: skip class, 1: attend class
         self.reward_model = reward_model
         self.reset()
         
     def reset(self):
-        # 初始化状态
-        self.earliest_start = 1.0      # 没有上过课：设为1.0（代表24:00归一化）
-        self.total_attended = 0.0
+        # Initialize state variables
+        # Initial GPA is 4.0; initial fatigue is 0.0; no course has been decided yet.
         self.gpa = 4.0
         self.fatigue = 0.0
-        self.current_course = 0        # 待决策的课程索引
+        self.current_course = 0
         self.total_reward = 0.0
         return self._get_state()
 
     def _get_state(self):
-        # 状态以元组表示，取整或四舍五入处理连续值以减小状态空间
-        return (round(self.earliest_start, 2),
-                round(self.total_attended, 2),
-                round(self.gpa, 2),
-                round(self.fatigue, 2),
-                self.day)
+        # Discretize fatigue into 3 levels
+        if self.fatigue < 1.5:
+            fatigue_level = 1
+        elif self.fatigue < 2.5:
+            fatigue_level = 2
+        else:
+            fatigue_level = 3
+        
+        # Discretize GPA into three levels:
+        if self.gpa < 3.0:
+            gpa_level = 1
+        elif self.gpa < 4.0:
+            gpa_level = 2
+        else:
+            gpa_level = 3
+
+        # For the upcoming course, if any:
+        if self.current_course < self.num_courses:
+            course = self.day_schedule[self.current_course]
+            # course is of the form (course_code, (start, end), required)
+            current_required = 1 if course[2] else 0
+            start = course[1][0]  # course start time (in hours)
+            # Discretize current_start_time: assume range 8-18 hours, then subtract 8 and divide by 10,
+            # then assign bins: 1 if < (10-8)/10, 2 if < (14-8)/10, 3 otherwise.
+            if start < 10:
+                current_start_level = 1
+            elif start < 14:
+                current_start_level = 2
+            else:
+                current_start_level = 3
+        else:
+            current_required = 0
+            current_start_level = 0
+
+        return (gpa_level, fatigue_level, self.day, current_required, current_start_level)
 
     def step(self, action):
         """
-        完整的 step 函数：
-          1. 调用 transition(action) 得到 next_state, done, info；
-          2. 通过 compute_reward(next_state) 计算即时 reward；
-          3. 累加 total_reward，然后返回 (next_state, reward, done, info)
+        Full step function:
+          1. Call transition(action) to obtain next_state, done, info;
+          2. Compute immediate reward using compute_reward(next_state);
+          3. Accumulate total_reward and return (next_state, reward, done, info).
         """
         next_state, done, info = self.transition(action)
         reward = self.compute_reward(next_state)
         self.total_reward += reward
         return next_state, reward, done, info
+    
     def transition(self, action):
         """
-        根据动作更新状态，仅进行状态转移，不计算 reward。
-        更新规则如下：
-          - 如果 action==1 (上课)：
-                total_attended 加上课程持续时长；
-                如果 earliest_start==1.0，则设置为当前课程的归一化开始时间，否则取二者最小；
-                fatigue 增加 0.2 * duration；
-                并有20%概率（随机）使得 GPA 增加 [0.05, 0.1]（上限 5.0）。
-          - 如果 action==0 (不上课)：
-                fatigue 降低一个在[0.05, 0.15]之间的随机值（最低0）；
-                如果该课为必修，则有70%的概率使 GPA 下降 0.1。
-          然后 current_course 加 1，当所有课程决策完毕时，done = True。
-        返回更新后的下一状态、done 标志和 info 字典。
+        Update state based on action without computing reward.
+        Update rules:
+          - If action == 1 (attend):
+                Increase fatigue by 0.5 * duration (or more if the current class starts before 10 AM).
+                If the current course starts before 10 AM (i.e., current_start_level == 1),
+                increase fatigue by 0.7 * duration instead.
+                With a probability of 30%, increase GPA by a random value between 0.3 and 0.6 (capped at 5.0).
+          - If action == 0 (skip):
+                Decrease fatigue by a random value between 0.5 and 1.
+                If the course is required, then with a 70% probability, decrease GPA by 1.
+          Increment current_course. When all courses are processed, set done = True.
+        Return the new state, done flag, and an info dictionary.
         """
         done = False
         info = {}
@@ -92,22 +124,20 @@ class SimpleCourseScheduleEnv(gym.Env):
         course_code, time_range, required = course
         start, end = time_range
         duration = end - start
-        norm_start = start / 24.0
 
-        if action == 1:  # 上课
-            self.total_attended += duration
-            if self.earliest_start == 1.0:
-                self.earliest_start = norm_start
+        if action == 1:  # Attend class
+            # Increase fatigue: if the current class starts before 10, use a higher multiplier.
+            if start < 10:
+                self.fatigue = min(4, self.fatigue + 0.7 * duration)
             else:
-                self.earliest_start = min(self.earliest_start, norm_start)
-            self.fatigue += 0.2 * duration
-            if random.random() < 0.2:
-                self.gpa = min(5.0, self.gpa + random.uniform(0.05, 0.1))
-        else:  # 不上课
-            self.fatigue = max(0.0, self.fatigue - random.uniform(0.05, 0.15))
+                self.fatigue = min(4, self.fatigue + 0.5 * duration)
+            if random.random() < 0.3:
+                self.gpa = min(5.0, self.gpa + random.uniform(0.3, 0.6))
+        else:  # Skip class
+            self.fatigue = max(0.0, self.fatigue - random.uniform(0.5, 1))
             if required:
                 if random.random() < 0.7:
-                    self.gpa = max(0.0, self.gpa - 0.1)
+                    self.gpa = max(0.0, self.gpa - 1)
 
         self.current_course += 1
         if self.current_course >= self.num_courses:
@@ -115,58 +145,62 @@ class SimpleCourseScheduleEnv(gym.Env):
 
         next_state = self._get_state()
         return next_state, done, info
-    
+
     def compute_reward(self, state):
         """
-        使用训练好的 reward model 计算奖励。
-        state 格式：(earliest_start, total_attended, gpa, fatigue, day)
-        注意：输入状态需要与训练 reward model 时保持一致。
+        Compute the reward using the trained reward model if provided.
+        The state format is: (gpa_level, fatigue_level, day, current_required, current_start_level)
+        The state must match the format used during reward model training.
+        If no reward model is provided, a fallback rule-based reward is used.
         """
         if self.reward_model is not None:
-            # 转换为 tensor，并增加 batch 维度：形状 [1, 5]
             state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
-            # 确保模型处于 eval 模式，并使用 no_grad 避免梯度计算
             self.reward_model.eval()
             with torch.no_grad():
                 reward_tensor = self.reward_model(state_tensor)
-            # reward_tensor 的形状一般为 [1, 1]，返回标量
             return reward_tensor.item()
         else:
-            # 若没有提供 reward model，则退回到 rule-based 的方式
-            earliest_start, total_attended, gpa, fatigue, day = state
-            return 0.9 * total_attended - 3.0 * fatigue + 1.0 * gpa - 10.0 * earliest_start
+            # Fallback rule-based reward:
+            # Here we want to reward higher GPA, lower fatigue, and penalize very early start times.
+            gpa_level, fatigue_level, day, current_required, current_start_level = state
+            return 1.0 * gpa_level - 3.0 * fatigue_level - 10.0 * current_start_level
 
     def render(self, mode='human'):
-        print("State (earliest_start, total_attended, gpa, fatigue, day):", self._get_state())
+        print("State (gpa_level, fatigue_level, day, current_required, current_start_level):", self._get_state())
         print("Total Reward:", self.total_reward)
-        print("-"*40)
+        print("-" * 40)
 
 # ===============================
 # Q-Learning Agent (Tabular)
 # ===============================
 
 class RewardModel(nn.Module):
-    def __init__(self, input_dim=5, hidden_dim=16):
+    def __init__(self, input_dim=5, hidden_dim1=32, hidden_dim2=16, dropout_prob=0.2):
         super().__init__()
-        self.fc1 = nn.Linear(input_dim, hidden_dim)
-        self.relu = nn.ReLU()
-        self.fc2 = nn.Linear(hidden_dim, 1)  # 输出单个标量
+        self.fc1 = nn.Linear(input_dim, hidden_dim1)
+        self.relu1 = nn.ReLU()
+        self.dropout1 = nn.Dropout(dropout_prob)
+        self.fc2 = nn.Linear(hidden_dim1, hidden_dim2)
+        self.relu2 = nn.ReLU()
+        self.dropout2 = nn.Dropout(dropout_prob)
+        self.fc3 = nn.Linear(hidden_dim2, 1)
 
     def forward(self, x):
         # x: [batch_size, input_dim]
         x = self.fc1(x)
-        x = self.relu(x)
+        x = self.relu1(x)
+        x = self.dropout1(x)
         x = self.fc2(x)
-        return x  # 输出形状 [batch_size, 1]
+        x = self.relu2(x)
+        x = self.dropout2(x)
+        x = self.fc3(x)
+        return x  # Output shape: [batch_size, 1]
 def discretize_state(state):
-    """
-    state 是一个 5 元组 (earliest_start, total_attended, gpa, fatigue, day)。
-    已经经过四舍五入处理，但这里可直接用作 key。
-    """
+
     return state
 
-def q_learning_agent(env, num_episodes=500, alpha=0.1, gamma=0.99, epsilon=0.1):
-    # Q 表以 (state, action) 为 key。
+def q_learning_agent(env, num_episodes=500, alpha=0.1, gamma=0.99, epsilon=0.2):
+
     Q = {}
     
     def get_Q(state, action):
@@ -177,7 +211,7 @@ def q_learning_agent(env, num_episodes=500, alpha=0.1, gamma=0.99, epsilon=0.1):
         done = False
         while not done:
             state_key = discretize_state(state)
-            # ε-greedy 策略
+            # ε-greedy
             if random.random() < epsilon:
                 action = env.action_space.sample()
             else:
@@ -199,57 +233,55 @@ def q_policy(state, env, Q):
     return int(np.argmax(q_vals))
 
 # ===============================
-# 定义其他 Agent 策略
+# Other agent policies
 # ===============================
 def random_agent_policy(state, env):
+    # Returns a random action from the environment's action space.
     return env.action_space.sample()
 
-def all_attend_agent_policy(state, env):
+def hardworking_agent_policy(state, env):
+    """
+    A hardworking agent always attends class.
+    This policy is simplistic: it returns 1 for every decision.
+    """
     return 1
-def convert_day_schedule_to_state(day_schedule, day=0, initial_gpa=4.0):
-    """
-    将实际去上了的课表（day_schedule）转换为环境内部状态表示 s = (earliest_start, total_attended, gpa, fatigue, day)
-    
-    参数:
-      day_schedule: list of tuples, 每个元组 (course_code, (start, end), required)
-                    表示一天中一门课程的信息。假设每门课均为已上（action==1）。
-      day: 整数，表示当天，默认 0（例如星期一）
-      initial_gpa: 初始绩点，默认 4.0
-      
-    返回:
-      state: tuple, (earliest_start, total_attended, gpa, fatigue, day)
-             其中 earliest_start 为所有课程中最早的上课开始时间（归一化到 [0,1]），
-             total_attended 为累计上课时长（小时），
-             fatigue 为累计疲劳（0.2 * 课程时长之和），
-             gpa 和 day 分别为给定的初始 gpa 和 day。
-    """
-    if not day_schedule:
-        # 如果课表为空，则返回默认状态
-        return (1.0, 0.0, initial_gpa, 0.0, day)
-    
-    # 计算累计上课时长
-    total_attended = 0.0
-    fatigue = 0.0
-    # earliest_start 取所有课程中的最小开始时间
-    earliest_start_raw = float('inf')
-    for course in day_schedule:
-        _, (start, end), _ = course
-        duration = end - start
-        total_attended += duration
-        fatigue += 0.2 * duration  # 每门课上课增加疲劳 0.2 * duration
-        if start < earliest_start_raw:
-            earliest_start_raw = start
-    # 将 earliest_start 归一化（假设一天以 24 小时为界）
-    earliest_start = earliest_start_raw / 24.0
 
-    # 进行四舍五入处理，使得状态离散化一些
-    earliest_start = round(earliest_start, 2)
-    total_attended = round(total_attended, 2)
-    fatigue = round(fatigue, 2)
-    gpa = round(initial_gpa, 2)
+def lazy_agent_policy(state, env):
+    """
+    A lazy agent prefers skipping classes, with some exceptions.
+
+    Given the state: 
+      (gpa_level, fatigue_level, day, current_required, current_start_level)
     
-    state = (earliest_start, total_attended, gpa, fatigue, day)
-    return state
+    The policy behaves as follows:
+      - If it's Friday (day == 5), the agent always skips (returns 0).
+      - For required courses (current_required == 1):  
+          * If gpa_level is low (i.e., 1), attend (return 1) to help maintain GPA.
+          * Otherwise, skip with a high probability (e.g., 80% skip, 20% attend).
+      - For non-required courses:
+          * If the course starts early (current_start_level == 1), skip (return 0).
+          * Otherwise, skip with a high probability (e.g., 90% skip, 10% attend).
+    """
+    gpa_level, fatigue_level, day, current_required, current_start_level = state
+    
+    # Always skip on Friday.
+    if day == 5:
+        return 0
+
+    if current_required == 1:
+        if gpa_level == 1:  # Very low GPA: might decide to attend to prevent a drop.
+            return 1
+        else:
+            # For required classes with moderate/high GPA, mostly skip (80% skip).
+            return 0 if random.random() < 0.8 else 1
+    else:
+        # For non-required classes, be extra lazy.
+        if current_start_level == 1:  # Early classes are heavily avoided.
+            return 0
+        else:
+            return 0 if random.random() < 0.9 else 1
+
+
 # ===============================
 # 策略评估
 # ===============================
@@ -307,9 +339,6 @@ def generate_schedule_trajectory(day_schedule, actions):
         trajectory.append(current_schedule.copy())
     
     return trajectory
-# ===============================
-# 主函数：训练和评估
-# ===============================
 
 # day_schedules = [
 #     [("CSE1895", (8, 9), True), ("CSE4037", (9, 10), True), ("CSE4016", (11, 12), True), ("CSE3418", (16, 17), True)],
@@ -331,66 +360,133 @@ def generate_schedule_trajectory(day_schedule, actions):
 #     [("CSE1681", (9, 10), True), ("CSE4541", (15, 16), True), ("CSE1207", (16, 17), True)],
 #     [("CSE1008", (10, 12), False), ("CSE2168", (12, 14), True)],
 #     [("CSE4935", (10, 11), True), ("CSE1891", (11, 13), False), ("CSE1205", (13, 14), True), ("CSE3942", (16, 19), True)],
-#     [("CSE1278", (9, 12), True), ("CSE3536", (17, 18), True)]
+#     [("CSE1278", (9, 12), True), ("CSE3536", (17, 18), True)],
+#     [("CSE5001", (8, 10), True), ("CSE5002", (10, 11), False)],
+#     [("CSE5101", (9, 10), True), ("CSE5102", (11, 12), True), ("CSE5103", (13, 14), True)],
+#     [("CSE5201", (8, 9), True), ("CSE5202", (9, 10), False), ("CSE5203", (15, 16), True)],
+#     [("CSE5301", (10, 11), True), ("CSE5302", (13, 15), True)],
+#     [("CSE5401", (9, 12), False)],
+#     [("CSE5501", (8, 9), True), ("CSE5502", (12, 13), True)],
+#     [("CSE5601", (8, 10), False), ("CSE5602", (14, 15), True)],
+#     [("CSE5701", (9, 10), True), ("CSE5702", (11, 12), True), ("CSE5703", (16, 17), True)],
+#     [("CSE5801", (8, 9), False), ("CSE5802", (9, 11), True)],
+#     [("CSE5901", (10, 12), True), ("CSE5902", (14, 15), False)]
 # ]
 
-# days = [5,5,5,3,3,2,3,2,3,4,2,3,4,3,1,1,4,5,5,1]
+# days = [1,5,5,3,3,2,3,2,3,4,2,3,4,3,1,1,4,5,5,1,1,2,3,4,5,1,2,3,4,5]
+
+# import json
+
+# if __name__ == '__main__':
+
+#     all_results = [] 
+#     for day, day_schedule in zip(days, day_schedules):
+
+#         env = SimpleCourseScheduleEnv(day_schedule, day)
+    
+#         # Evaluate different agents:
+#         print("\nEvaluating Random Agent:")
+#         traj1 = evaluate_policy(env, random_agent_policy, num_episodes=5, render=False)
+#         traj2 = evaluate_policy(env, lazy_agent_policy, num_episodes=2, render=False)
+#         traj3 = evaluate_policy(env, hardworking_agent_policy, num_episodes=2, render=False)
+#         trajs = traj1 + traj2 + traj3
+#         for traj in trajs:
+#             actions = []
+#             states = []
+#             for action_state in traj:
+#                 action, state = action_state
+#                 actions.append(action)
+#                 states.append(state)
+#             final_state = states[-1]
+#             # In the new state: index 0 is gpa_level, index 2 is day.
+#             gpa_level = final_state[0]
+#             day_value = final_state[2]
+#             schedule_traj = generate_schedule_trajectory(day_schedule, actions)
+            
+#             info = f"\nday: {day_value}, gpa_level: {gpa_level}"
+#             result = "schedule trajectory: " + str(schedule_traj) + info
+#             print(result)
+#             print(states)
+#             all_results.append((result, states))
+#     print(len(all_results))
+    
+#     # Write all results to result_2.json file.
+#     wrapped = [{"result": r, "states": states} for r, states in all_results]
+
+#     with open("result_2.json", "w", encoding="utf-8") as f:
+#         json.dump(wrapped, f, indent=2, ensure_ascii=False)
 
 
-import json
+# import json
 
 if __name__ == '__main__':
-    model_path = '/Users/zzlou/Documents/Code/cs3263/CS3263/best_reward_model.pt'
-    reward_model = RewardModel(input_dim=5, hidden_dim=16)
-    # 加载模型参数（如果在 GPU 上训练，CPU 上加载时需要 map_location）
+
+    # Load the trained reward model
+    model_path = '/Users/zzlou/Documents/Code/cs3263/CS3263/best_reward_model_2.pt'
+    reward_model = RewardModel(input_dim=5, hidden_dim1=32, hidden_dim2=16, dropout_prob=0.2)
     reward_model.load_state_dict(torch.load(model_path, map_location='cpu'))
+    reward_model.eval()
 
-    # 2. 创建环境时传入 reward_model
-    day_schedule = [("ES1103", (9, 12), True), ("CS3263", (14, 15), True), ("CS2105", (17, 18), True)]
-    env = SimpleCourseScheduleEnv(day_schedule, day=1, reward_model=reward_model)
-    
-    # 测试环境：运行一个 episode 并渲染每步状态和总奖励
-    state = env.reset()
-    done = False
-    while not done:
-        action = env.action_space.sample()  # 随机动作演示
-        state, reward, done, info = env.step(action)
-        env.render()
+    # Define a sample day_schedule and set the day.
+    # (In this example, we use a day_schedule with three courses.)
+    day_schedule = [
+        ("PC1101", (10, 12), False),
+        ("CS2105", (14,16), False)
+    ]
+    day = 5
 
-    print("Episode finished. Total reward (by reward_model):", env.total_reward)
+    # Create the environment with the loaded reward model.
+    env = SimpleCourseScheduleEnv(day_schedule, day=day, reward_model=reward_model)
     
-    # all_results = [] 
-    # for day, day_schedule in zip(days, day_schedules):
+    # Train the Q-learning agent using the environment that uses the trained reward model.
+    print("Training Q-Learning agent...")
+    Q = q_learning_agent(env, num_episodes=500, alpha=0.1, gamma=0.99, epsilon=0.2)
+    print("Training finished.\n")
+    
+    # Evaluate the learned Q-learning policy using the q_policy.
+    # The evaluate_policy function will use the provided Q table.
+    print("Evaluating Q-Learning policy:")
+    trajectories = evaluate_policy(env, None, num_episodes=1, Q=Q, render=True)
+    actions = []
+    traj = trajectories[0]
+    for action_state in traj:
+        action, state = action_state
+        actions.append(action)
+    print(actions)
+    print("Evaluation finished.")
 
-    #     env = SimpleCourseScheduleEnv(day_schedule, day)
+#     # all_results = [] 
+#     # for day, day_schedule in zip(days, day_schedules):
+
+#     #     env = SimpleCourseScheduleEnv(day_schedule, day)
     
-    #     # 评估 Random Agent
-    #     print("\nEvaluating Random Agent:")
-    #     trajs = evaluate_policy(env, random_agent_policy, num_episodes=5, render=False)
-    #     for traj in trajs:
-    #         actions = []
-    #         states = []
-    #         for action_state in traj:
-    #             action, state = action_state
-    #             actions.append(action)
-    #             states.append(state)
-    #         final_state = states[-1]
-    #         gpa = final_state[2]
-    #         day_value = final_state[4]
-    #         schedule_traj = generate_schedule_trajectory(day_schedule, actions)
+#     #     # 评估 Random Agent
+#     #     print("\nEvaluating Random Agent:")
+#     #     trajs = evaluate_policy(env, random_agent_policy, num_episodes=5, render=False)
+#     #     for traj in trajs:
+#     #         actions = []
+#     #         states = []
+#     #         for action_state in traj:
+#     #             action, state = action_state
+#     #             actions.append(action)
+#     #             states.append(state)
+#     #         final_state = states[-1]
+#     #         gpa = final_state[2]
+#     #         day_value = final_state[4]
+#     #         schedule_traj = generate_schedule_trajectory(day_schedule, actions)
             
-    #         info = f"\nday: {day}, gpa: {gpa}"
-    #         result = "schedule trajectory: " + str(schedule_traj) + info
-    #         print(result)
-    #         print(states)
-    #         all_results.append((result,states))
-    # print(len(all_results))
-    # # 将所有结果写入 result.json 文件
+#     #         info = f"\nday: {day}, gpa: {gpa}"
+#     #         result = "schedule trajectory: " + str(schedule_traj) + info
+#     #         print(result)
+#     #         print(states)
+#     #         all_results.append((result,states))
+#     # print(len(all_results))
+#     # # 将所有结果写入 result.json 文件
     
-    # wrapped = [{"result": r, "states": states} for r,states in all_results]
+#     # wrapped = [{"result": r, "states": states} for r,states in all_results]
 
-    # with open("result.json", "w", encoding="utf-8") as f:
-    #     json.dump(wrapped, f, indent=2, ensure_ascii=False)
+#     # with open("result.json", "w", encoding="utf-8") as f:
+#     #     json.dump(wrapped, f, indent=2, ensure_ascii=False)
 
     # print("\nEvaluating All-Attend Agent:")
     # evaluate_policy(env, all_attend_agent_policy, num_episodes=5, render=False)

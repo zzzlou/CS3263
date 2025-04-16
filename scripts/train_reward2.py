@@ -8,66 +8,74 @@ import random
 # 定义 Reward Model
 # --------------------------
 class RewardModel(nn.Module):
-    def __init__(self, input_dim=5, hidden_dim=16):
+    def __init__(self, input_dim=5, hidden_dim1=32, hidden_dim2=16, dropout_prob=0.2):
         super().__init__()
-        self.fc1 = nn.Linear(input_dim, hidden_dim)
-        self.relu = nn.ReLU()
-        self.fc2 = nn.Linear(hidden_dim, 1)  # 输出单个标量
+        # First hidden layer with increased size
+        self.fc1 = nn.Linear(input_dim, hidden_dim1)
+        self.relu1 = nn.ReLU()
+        self.dropout1 = nn.Dropout(dropout_prob)
+        # Second hidden layer
+        self.fc2 = nn.Linear(hidden_dim1, hidden_dim2)
+        self.relu2 = nn.ReLU()
+        self.dropout2 = nn.Dropout(dropout_prob)
+        # Output layer producing a single scalar reward
+        self.fc3 = nn.Linear(hidden_dim2, 1)
 
     def forward(self, x):
         # x: [batch_size, input_dim]
         x = self.fc1(x)
-        x = self.relu(x)
+        x = self.relu1(x)
+        x = self.dropout1(x)
         x = self.fc2(x)
-        return x  # 输出形状 [batch_size, 1]
-
+        x = self.relu2(x)
+        x = self.dropout2(x)
+        x = self.fc3(x)
+        return x  # Output shape: [batch_size, 1]
 # --------------------------
 # 训练 Reward Model 的流程（含验证、early stopping 和模型保存）
 # --------------------------
 def train_reward_model(reward_model, optimizer, train_data, val_data, num_epochs=20, device='cpu', patience=5, model_save_path='best_reward_model.pt'):
     """
-    train_data, val_data: list，每个元素为 (traj1, traj2, human_feedback)
-      - traj1 与 traj2 均为 state 的 list, 每个 state 为 5 维向量
-      - human_feedback: 1 表示 traj1 被偏好，0 表示 traj2 被偏好
-    我们使用以下形式的对偶比较 logistic loss：
-      d = (mean_reward(traj1) - mean_reward(traj2))
-      p = sigmoid(d)
-      loss = -[y * log(p + eps) + (1-y) * log(1-p + eps)]
-    同时加入 early stopping（如果连续 `patience` 个 epoch 验证 loss 没有降低则提前停止）
+    train_data, val_data: list of tuples, each tuple is (traj1, traj2, human_feedback)
+       - traj1 and traj2 are lists of state (each state is a 5-D vector)
+       - human_feedback: 1 means traj1 is preferred, 0 means traj2 is preferred.
+       
+    We use a pairwise logistic (BCE) loss based on the difference in mean rewards:
+       d = (mean_reward(traj1) - mean_reward(traj2))
+       p = sigmoid(d)
+       loss = -[y * log(p + eps) + (1-y)*log(1-p + eps)]
+       
+    Early stopping: if validation loss does not improve for 'patience' consecutive epochs, stop training.
     """
     reward_model.to(device)
     best_val_loss = float('inf')
     patience_counter = 0
-    eps = 1e-8  # 防止 log(0)
+    eps = 1e-8  # small epsilon to avoid log(0)
     
     for epoch in range(num_epochs):
         reward_model.train()
         total_train_loss = 0.0
         
+        # Training phase
         for traj1, traj2, feedback in train_data:
-            # 计算 traj1 的平均 reward
+            # Calculate mean reward for traj1
             rewards_traj1 = []
             for state in traj1:
                 state_tensor = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
                 rewards_traj1.append(reward_model(state_tensor))
-            # 将累计 reward 除以轨迹长度进行归一化
             R_traj1 = sum(rewards_traj1) / len(traj1)
             
-            # 同样计算 traj2 的平均 reward
+            # Calculate mean reward for traj2
             rewards_traj2 = []
             for state in traj2:
                 state_tensor = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
                 rewards_traj2.append(reward_model(state_tensor))
             R_traj2 = sum(rewards_traj2) / len(traj2)
             
-            # 归一化后的差值 d（这里 d 为 1x1 的张量）
             d_tensor = R_traj1 - R_traj2  # shape [1,1]
-            d_tensor = d_tensor.squeeze()  # 变成标量张量
-            
-            # 将反馈转换为标量张量（1 表示 traj1 被偏好）
+            d_tensor = d_tensor.squeeze()  # convert to scalar tensor
             target = torch.tensor(float(feedback), dtype=torch.float32, device=device)
             
-            # 计算对偶 logistic loss（pairwise preference loss）
             p = torch.sigmoid(d_tensor)
             loss = - ( target * torch.log(p + eps) + (1.0 - target) * torch.log(1.0 - p + eps) )
             
@@ -77,7 +85,7 @@ def train_reward_model(reward_model, optimizer, train_data, val_data, num_epochs
             
             total_train_loss += loss.item()
         
-        # 验证阶段
+        # Validation phase
         reward_model.eval()
         total_val_loss = 0.0
         with torch.no_grad():
@@ -103,23 +111,23 @@ def train_reward_model(reward_model, optimizer, train_data, val_data, num_epochs
         
         print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {total_train_loss:.4f}, Val Loss: {total_val_loss:.4f}")
         
-        # Early stopping 检查与模型保存
+        # Early stopping: if no improvement for 'patience' consecutive epochs, then stop.
         if total_val_loss < best_val_loss:
             best_val_loss = total_val_loss
-            patience_counter = 0
             torch.save(reward_model.state_dict(), model_save_path)
             print(f"Model saved at epoch {epoch+1} with val loss {best_val_loss:.4f}")
+            patience_counter = 0
         else:
             patience_counter += 1
             if patience_counter >= patience:
-                print(f"Early stopping triggered at epoch {epoch+1}: No improvement for {patience} epochs.")
+                print(f"Early stopping triggered at epoch {epoch+1}: No improvement for {patience} consecutive epochs.")
                 break
 
 # --------------------------
 # 主流程：加载数据、划分训练集和验证集，训练 Reward Model
 # --------------------------
 if __name__ == "__main__":
-    with open("training_data_lazy.json", "r", encoding="utf-8") as f:
+    with open("training_data_lazy_2.json", "r", encoding="utf-8") as f:
         json_data = json.load(f)
     
     # 处理为训练格式: List[(traj1, traj2, feedback)]
@@ -138,7 +146,7 @@ if __name__ == "__main__":
     
     # 初始化模型与优化器
     input_dim = 5
-    reward_model = RewardModel(input_dim=input_dim, hidden_dim=16)
+    reward_model = RewardModel(input_dim=input_dim)
     optimizer = optim.Adam(reward_model.parameters(), lr=0.01)
     
     print("Training reward model with human feedback...")
