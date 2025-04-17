@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch
 
 # ===============================
-# 简化版一天内课表环境，状态表示 s = (earliest_start, total_attended, gpa, fatigue, day)
+# s = (earliest_start, total_attended, gpa, fatigue, day)
 # ===============================
 import gym
 import numpy as np

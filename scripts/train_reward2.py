@@ -5,7 +5,7 @@ import json
 import random
 
 # --------------------------
-# 定义 Reward Model
+# Reward Model
 # --------------------------
 class RewardModel(nn.Module):
     def __init__(self, input_dim=5, hidden_dim1=32, hidden_dim2=16, dropout_prob=0.2):
@@ -32,7 +32,7 @@ class RewardModel(nn.Module):
         x = self.fc3(x)
         return x  # Output shape: [batch_size, 1]
 # --------------------------
-# 训练 Reward Model 的流程（含验证、early stopping 和模型保存）
+#
 # --------------------------
 def train_reward_model(reward_model, optimizer, train_data, val_data, num_epochs=20, device='cpu', patience=5, model_save_path='best_reward_model.pt'):
     """
@@ -131,7 +131,7 @@ if __name__ == "__main__":
     with open("training_data_lazy_2.json", "r", encoding="utf-8") as f:
         json_data = json.load(f)
     
-    # 处理为训练格式: List[(traj1, traj2, feedback)]
+    # Format: List[(traj1, traj2, feedback)]
     full_data = []
     for item in json_data:
         traj1 = item["traj1"]
@@ -139,13 +139,13 @@ if __name__ == "__main__":
         feedback = item["feedback"]
         full_data.append((traj1, traj2, feedback))
     
-    # 打乱数据后划分 80% 用于训练，20% 用于验证
+    # split
     random.shuffle(full_data)
     split_index = int(0.8 * len(full_data))
     train_data = full_data[:split_index]
     val_data = full_data[split_index:]
     
-    # 初始化模型与优化器
+    # initialize
     input_dim = 5
     reward_model = RewardModel(input_dim=input_dim)
     optimizer = optim.Adam(reward_model.parameters(), lr=0.01)

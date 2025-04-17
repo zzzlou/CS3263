@@ -1,10 +1,8 @@
 import json
 import random
-import openai  # 确保已安装 openai 包，并设置 API key
+import openai  
 from tqdm import tqdm
-import sys
-# 请在此处设置你的 OpenAI API key
-api_key = "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"
+api_key = "YOUR_OPENAI_API_KEY"
 client = openai.OpenAI(api_key=api_key)
 def get_gpt_feedback(result1, result2, max_tokens=10, temperature=0.0):
     """
@@ -46,16 +44,13 @@ def get_gpt_feedback(result1, result2, max_tokens=10, temperature=0.0):
             stop=None
         )
         answer = response.choices[0].message.content.strip()
-        # 如果返回的答案中含有非数字字符，取首个字符
         print(answer)
         if answer and answer[0] in ['0', '1']:
             return int(answer[0])
         else:
-            # 默认返回 1
             return -1
     except Exception as e:
         print("GPT API Error:", e)
-        # 若出错，随机返回 0 或 1
         return random.choice([0, 1])
 
 def sample_training_pairs(data):
@@ -131,10 +126,10 @@ def sample_training_pairs(data):
 
 
 # ------------------------------
-# 主流程
+# Main
 # ------------------------------
 if __name__ == '__main__':
-    # 读取已有的 result.json 文件（假设其中有 100 个 trajectory 对象）
+   
     with open("result_2.json", "r", encoding="utf-8") as f:
         data = json.load(f)
     
