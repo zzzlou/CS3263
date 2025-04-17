@@ -101,15 +101,14 @@ extra_pairs = [
     {"preferred": (3, 1, 1, 0, 2), "less_preferred": (2, 3, 1, 1, 1)},
 ]
 
-# 用来计数 preferred 状态得分更高的对数
+
 correct = 0
-# 为了计算 AUC，我们将所有的预测结果与对应的标签（preferred 为正例 1，less_preferred 为负例 0）分别存储
+
 predictions = []
 labels = []
 
-# 对每一对状态进行评估
+
 for pair in extra_pairs:
-    # 将状态数据转换成 tensor，并增加 batch 维度
     state_preferred_tensor = torch.tensor(pair['preferred'], dtype=torch.float32).unsqueeze(0)
     state_less_tensor = torch.tensor(pair['less_preferred'], dtype=torch.float32).unsqueeze(0)
     
@@ -117,24 +116,24 @@ for pair in extra_pairs:
         reward_preferred = reward_model(state_preferred_tensor).item()
         reward_less = reward_model(state_less_tensor).item()
     
-    # 对比得分
+
     if reward_preferred > reward_less:
         correct += 1
     
-    # 保存每个状态的预测结果和对应标签，用于计算 AUC
+
     predictions.extend([reward_preferred, reward_less])
     labels.extend([1, 0])
 
-# 计算 Accuracy
+
 accuracy = correct / len(extra_pairs)
 
-# 计算 AUC-ROC
+ 
 auc = roc_auc_score(labels, predictions)
 
-# 使用 binomtest 进行二项检验，假设在随机预测下成功率应为 50%
+
 binom_result = binomtest(correct, len(extra_pairs), p=0.5, alternative='greater')
 
-# 打印结果
+# print results
 print("Accuracy:", accuracy)
 print("AUC-ROC:", auc)
 print("Binomial test result:", binom_result)
