@@ -199,7 +199,7 @@ def discretize_state(state):
 
     return state
 
-def q_learning_agent(env, num_episodes=500, alpha=0.1, gamma=0.99, epsilon=0.2):
+def q_learning_agent(env, num_episodes=500, alpha=0.1, gamma=0.99, epsilon=0.2,theta=1e-3):
 
     Q = {}
     
@@ -209,6 +209,7 @@ def q_learning_agent(env, num_episodes=500, alpha=0.1, gamma=0.99, epsilon=0.2):
     for episode in range(num_episodes):
         state = env.reset()
         done = False
+        max_delta = 0.0
         while not done:
             state_key = discretize_state(state)
             # ε-greedy
@@ -224,7 +225,11 @@ def q_learning_agent(env, num_episodes=500, alpha=0.1, gamma=0.99, epsilon=0.2):
             current_q = get_Q(state_key, action)
             new_q = current_q + alpha * (reward + gamma * future_q - current_q)
             Q[(state_key, action)] = new_q
+            max_delta = max(max_delta, abs(new_q - current_q))
             state = next_state
+        if max_delta < theta:
+            print(f"Converged at episode {episode} (max ΔQ={max_delta:.5f} < θ={theta})")
+            break
     return Q
 
 def q_policy(state, env, Q):

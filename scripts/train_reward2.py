@@ -84,6 +84,7 @@ def train_reward_model(reward_model, optimizer, train_data, val_data, num_epochs
             optimizer.step()
             
             total_train_loss += loss.item()
+            avg_train_loss = total_train_loss / len(train_data)
         
         # Validation phase
         reward_model.eval()
@@ -109,7 +110,7 @@ def train_reward_model(reward_model, optimizer, train_data, val_data, num_epochs
                 loss = - ( target * torch.log(p + eps) + (1.0 - target) * torch.log(1.0 - p + eps) )
                 total_val_loss += loss.item()
         
-        print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {total_train_loss:.4f}, Val Loss: {total_val_loss:.4f}")
+        print(f"Epoch {epoch+1}, Avg Train Loss: {avg_train_loss:.4f}, Avg Val Loss: {total_val_loss/len(val_data):.4f}")
         
         # Early stopping: if no improvement for 'patience' consecutive epochs, then stop.
         if total_val_loss < best_val_loss:
