@@ -1,8 +1,19 @@
 import pickle
 import os
-from collections import defaultdict, Counter
+from collections import Counter
 import matplotlib.pyplot as plt
 import seaborn as sns
+
+# 映射星期字符串到数字
+DAY_TO_INDEX = {
+    "Monday": 0,
+    "Tuesday": 1,
+    "Wednesday": 2,
+    "Thursday": 3,
+    "Friday": 4,
+    "Saturday": 5,
+    "Sunday": 6
+}
 
 def load_pickle(path):
     with open(path, 'rb') as f:
@@ -14,15 +25,24 @@ def extract_schedule(final_state, permutation_dict, course_order):
         perm_index = final_state[i]
         sessions = permutation_dict[course_code][perm_index]
         for s in sessions:
-            start = int(s.start_time)
-            end = int(s.end_time)
-            day = int(s.day)
-            schedule.append((day, start, end))
+            # 处理字符串星期
+            if isinstance(s.day, str):
+                day = DAY_TO_INDEX.get(s.day, -1)
+            else:
+                day = s.day
+            if day == -1:
+                continue  # 忽略无效 weekday
+
+            # 强制转换时间为整数
+            try:
+                start = int(s.start_time)
+                end = int(s.end_time)
+                schedule.append((day, start, end))
+            except ValueError:
+                continue  # 有些start_time可能是非法字符串
     return schedule
 
-
 def aggregate_schedule_data(directory):
-
     day_hour_counter = Counter()
 
     for fname in os.listdir(directory):
@@ -50,7 +70,8 @@ def visualize_heatmap(counter):
     """
     heatmap = [[0]*24 for _ in range(7)]
     for (day, hour), count in counter.items():
-        heatmap[day][hour] = count
+        if 0 <= hour < 24 and 0 <= day <= 6:
+            heatmap[day][hour] = count
 
     plt.figure(figsize=(12, 6))
     sns.heatmap(heatmap, cmap="YlGnBu", xticklabels=range(24), yticklabels=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"])
@@ -61,7 +82,7 @@ def visualize_heatmap(counter):
     plt.show()
 
 def main():
-    directory = "student_outputs"  
+    directory = "student_outputs"  # 修改为你保存.pkl文件的文件夹路径
     counter = aggregate_schedule_data(directory)
     visualize_heatmap(counter)
 
