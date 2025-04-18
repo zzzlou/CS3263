@@ -14,8 +14,12 @@ def extract_schedule(final_state, permutation_dict, course_order):
         perm_index = final_state[i]
         sessions = permutation_dict[course_code][perm_index]
         for s in sessions:
-            schedule.append((s.day, s.start_time, s.end_time))  # e.g., (1, 10, 12)
+            start = int(s.start_time)
+            end = int(s.end_time)
+            day = int(s.day)
+            schedule.append((day, start, end))
     return schedule
+
 
 def aggregate_schedule_data(directory):
 
@@ -57,7 +61,7 @@ def visualize_heatmap(counter):
     plt.show()
 
 def main():
-    directory = "pkl_outputs"  
+    directory = "student_outputs"  
     counter = aggregate_schedule_data(directory)
     visualize_heatmap(counter)
 
