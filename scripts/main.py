@@ -6,6 +6,9 @@ from AttendanceBehavior import *
 import sys
 from Q_learning import q_learning, get_final_state
 import random
+import pickle
+import os
+from aggregate_preferences import save_pickle_outputs
 
 
 BEAM_WIDTH = 10
@@ -13,7 +16,7 @@ BEAM_WIDTH = 10
 def main():
     # Construct dictionary of permutations of states
     # course_codes = input("Enter courses you would like to enrol in, separated by commas: ").split(",")
-    course_codes = ["CS1101S", "IS1108", "MA1521", "MA1522", "CS1231S"]
+    course_codes = ["CS1101S"] # , "IS1108", "MA1521", "MA1522", "CS1231S"]
     courses = []
     for code in course_codes:
         code = code.upper()
@@ -69,11 +72,11 @@ def main():
     print(res[0])
 
 
-    # Q = q_learning(domain,res,permutation_dict,verbose=True)
-# 
-    # final_state = get_final_state(Q,res,domain,500)
-    # print(f"final state according to learned q function: {final_state}")
-    # print(Q)
+    Q = q_learning(domain,res[0][0],permutation_dict,verbose=True)
+ 
+    final_state = get_final_state(Q,res[0][0],domain,500)
+    print(f"final state according to learned q function: {final_state}")
+    print(Q)
 
 
     # calculate_attendance
@@ -81,6 +84,20 @@ def main():
     # print(calculate_attendance(permutation_dict, courses, res, LazyPerson()))
     # print(calculate_attendance(permutation_dict, courses, res, NormalPerson()))
     # print(calculate_attendance(permutation_dict, courses, res, Grinder()))
+
+    # save to pickle outputs
+    output_dir = "student_outputs"
+    os.makedirs(output_dir, exist_ok=True)
+
+    student_id = "A0287922R"  
+    with open(f"{output_dir}/{student_id}_final_state.pkl", "wb") as f:
+        pickle.dump(final_state, f)
+
+    with open(f"{output_dir}/{student_id}_permutation_dict.pkl", "wb") as f:
+        pickle.dump(permutation_dict, f)
+
+    with open(f"{output_dir}/{student_id}_code_order.pkl", "wb") as f:
+        pickle.dump(code_order, f)
 
 
 if __name__ == "__main__":
