@@ -1,94 +1,65 @@
-from collections import defaultdict
+import pickle
+import os
+from collections import defaultdict, Counter
 import matplotlib.pyplot as plt
 import seaborn as sns
-import numpy as np
-import pickle
 
+def load_pickle(path):
+    with open(path, 'rb') as f:
+        return pickle.load(f)
 
-def extract_time_blocks(permutation_dict, code_order, final_state):
-    """
-    Given one student's final state, extract all (day, hour) blocks they attend.
-    Returns a list of (day, hour) tuples.
-    """
-    time_blocks = []
-    for i, course_code in enumerate(code_order):
-        selected_index = final_state[i]
-        sessions = permutation_dict[course_code][selected_index]
-        for session in sessions:
-            start = int(session.start_time)
-            end = int(session.end_time)
-            day = session.day  # e.g., "Monday"
-            for hour in range(start, end, 100):  # in 100-unit steps (e.g., 0900, 1000, etc.)
-                time_blocks.append((day, hour))
-    return time_blocks
+def extract_schedule(final_state, permutation_dict, course_order):
+    schedule = []
+    for i, course_code in enumerate(course_order):
+        perm_index = final_state[i]
+        sessions = permutation_dict[course_code][perm_index]
+        for s in sessions:
+            schedule.append((s.day, s.start_time, s.end_time))  # e.g., (1, 10, 12)
+    return schedule
 
-def aggregate_all_preferences(final_states, permutation_dict, code_order):
-    """
-    Aggregate time preferences across many students.
-    final_states: List of tuples, each representing one student's final schedule.
-    Returns a dictionary of (day, hour) -> count.
-    """
-    counter = defaultdict(int)
-    for final_state in final_states:
-        blocks = extract_time_blocks(permutation_dict, code_order, final_state)
-        for block in blocks:
-            counter[block] += 1
-    return counter
+def aggregate_schedule_data(directory):
+
+    day_hour_counter = Counter()
+
+    for fname in os.listdir(directory):
+        if fname.endswith("_final_state.pkl"):
+            student_id = fname.split("_final_state.pkl")[0]
+            final_state_path = os.path.join(directory, f"{student_id}_final_state.pkl")
+            perm_dict_path = os.path.join(directory, f"{student_id}_permutation_dict.pkl")
+            code_order_path = os.path.join(directory, f"{student_id}_code_order.pkl")
+
+            final_state = load_pickle(final_state_path)
+            permutation_dict = load_pickle(perm_dict_path)
+            course_order = load_pickle(code_order_path)
+
+            schedule = extract_schedule(final_state, permutation_dict, course_order)
+
+            for (day, start, end) in schedule:
+                for hour in range(start, end):
+                    day_hour_counter[(day, hour)] += 1
+
+    return day_hour_counter
 
 def visualize_heatmap(counter):
-    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-    hours = list(range(800, 2000, 100))  # 8am to 7pm
+    """
+    counter: (day, hour) -> count
+    """
+    heatmap = [[0]*24 for _ in range(7)]
+    for (day, hour), count in counter.items():
+        heatmap[day][hour] = count
 
-    matrix = np.zeros((len(days), len(hours)))
-    for i, day in enumerate(days):
-        for j, hour in enumerate(hours):
-            matrix[i, j] = counter.get((day, hour), 0)
-
-    plt.figure(figsize=(12, 5))
-    sns.heatmap(matrix, annot=True, fmt=".0f", cmap="YlGnBu",
-                xticklabels=[f"{h//100}:00" for h in hours], yticklabels=days)
-    plt.title("Aggregated Student Class Time Preferences")
+    plt.figure(figsize=(12, 6))
+    sns.heatmap(heatmap, cmap="YlGnBu", xticklabels=range(24), yticklabels=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"])
     plt.xlabel("Hour of Day")
     plt.ylabel("Day of Week")
+    plt.title("Aggregate Preferred Class Times")
     plt.tight_layout()
     plt.show()
 
-def save_pickle_outputs(final_state, permutation_dict, code_order, path_prefix="output"):
-    """
-    Save the key components needed for preference aggregation into pickle files.
-    final_state can be a single one (tuple) or a list of states.
-    """
-    if not isinstance(final_state, list):
-        final_state = [final_state]  # make it a list for consistency
-
-    with open(f"{path_prefix}_final_states.pkl", "wb") as f:
-        pickle.dump(final_state, f)
-
-    with open(f"{path_prefix}_permutation_dict.pkl", "wb") as f:
-        pickle.dump(permutation_dict, f)
-
-    with open(f"{path_prefix}_code_order.pkl", "wb") as f:
-        pickle.dump(code_order, f)
-
-    print("Saved pickle files:")
-    print(f"- {path_prefix}_final_states.pkl")
-    print(f"- {path_prefix}_permutation_dict.pkl")
-    print(f"- {path_prefix}_code_order.pkl")
-
-
-
 def main():
-    # Example placeholder: load final_states, permutation_dict, code_order from file
-    with open("final_states.pkl", "rb") as f:
-        final_states = pickle.load(f)
-    with open("permutation_dict.pkl", "rb") as f:
-        permutation_dict = pickle.load(f)
-    with open("code_order.pkl", "rb") as f:
-        code_order = pickle.load(f)
-
-    counter = aggregate_all_preferences(final_states, permutation_dict, code_order)
+    directory = "pkl_outputs"  
+    counter = aggregate_schedule_data(directory)
     visualize_heatmap(counter)
-
 
 if __name__ == "__main__":
     main()
