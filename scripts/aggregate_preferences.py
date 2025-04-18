@@ -4,15 +4,9 @@ from collections import Counter
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# 映射星期字符串到数字
 DAY_TO_INDEX = {
-    "Monday": 0,
-    "Tuesday": 1,
-    "Wednesday": 2,
-    "Thursday": 3,
-    "Friday": 4,
-    "Saturday": 5,
-    "Sunday": 6
+    "Monday": 0, "Tuesday": 1, "Wednesday": 2,
+    "Thursday": 3, "Friday": 4, "Saturday": 5, "Sunday": 6
 }
 
 def load_pickle(path):
@@ -25,64 +19,61 @@ def extract_schedule(final_state, permutation_dict, course_order):
         perm_index = final_state[i]
         sessions = permutation_dict[course_code][perm_index]
         for s in sessions:
-            # 处理字符串星期
-            if isinstance(s.day, str):
-                day = DAY_TO_INDEX.get(s.day, -1)
-            else:
-                day = s.day
-            if day == -1:
-                continue  # 忽略无效 weekday
-
-            # 强制转换时间为整数
+            print(f"Session: day={s.day}, start={s.start_time}, end={s.end_time}")
+            day = DAY_TO_INDEX.get(s.day.strip(), -1) if isinstance(s.day, str) else s.day
+            if not isinstance(day, int) or not (0 <= day <= 6):
+                continue
             try:
-                start = int(s.start_time)
-                end = int(s.end_time)
-                schedule.append((day, start, end))
-            except ValueError:
-                continue  # 有些start_time可能是非法字符串
+                start = int(float(s.start_time)) // 100
+                end = int(float(s.end_time)) // 100
+                if 0 <= start < end <= 24:
+                    schedule.append((day, start, end))
+            except Exception as e:
+                print(f"Error converting times: {e}")
     return schedule
 
-def aggregate_schedule_data(directory):
-    day_hour_counter = Counter()
 
+def aggregate_schedule_data(directory):
+    counter = Counter()
     for fname in os.listdir(directory):
         if fname.endswith("_final_state.pkl"):
-            student_id = fname.split("_final_state.pkl")[0]
-            final_state_path = os.path.join(directory, f"{student_id}_final_state.pkl")
-            perm_dict_path = os.path.join(directory, f"{student_id}_permutation_dict.pkl")
-            code_order_path = os.path.join(directory, f"{student_id}_code_order.pkl")
-
-            final_state = load_pickle(final_state_path)
-            permutation_dict = load_pickle(perm_dict_path)
-            course_order = load_pickle(code_order_path)
-
-            schedule = extract_schedule(final_state, permutation_dict, course_order)
-
+            student_id = fname.replace("_final_state.pkl", "")
+            final_state = load_pickle(os.path.join(directory, f"{student_id}_final_state.pkl"))
+            perm_dict = load_pickle(os.path.join(directory, f"{student_id}_permutation_dict.pkl"))
+            code_order = load_pickle(os.path.join(directory, f"{student_id}_code_order.pkl"))
+            schedule = extract_schedule(final_state, perm_dict, code_order)
             for (day, start, end) in schedule:
                 for hour in range(start, end):
-                    day_hour_counter[(day, hour)] += 1
-
-    return day_hour_counter
+                    counter[(day, hour)] += 1
+    return counter
 
 def visualize_heatmap(counter):
-    """
-    counter: (day, hour) -> count
-    """
-    heatmap = [[0]*24 for _ in range(7)]
-    for (day, hour), count in counter.items():
-        if 0 <= hour < 24 and 0 <= day <= 6:
-            heatmap[day][hour] = count
+    heatmap = [[0]*24 for _ in range(5)] 
 
-    plt.figure(figsize=(12, 6))
-    sns.heatmap(heatmap, cmap="YlGnBu", xticklabels=range(24), yticklabels=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"])
-    plt.xlabel("Hour of Day")
-    plt.ylabel("Day of Week")
-    plt.title("Aggregate Preferred Class Times")
+    for (day, hour), count in counter.items():
+        if 0 <= day < 5 and 0 <= hour < 24:
+            heatmap[4 - day][23 - hour] = count
+
+    plt.figure(figsize=(12, 4))
+    ax = sns.heatmap(
+        heatmap,
+        cmap="YlGnBu",
+        xticklabels=False,  
+        yticklabels=["Mon", "Tue", "Wed", "Thu", "Fri"],
+    )
+
+    ax.set_xticks([i for i in range(24)])
+    ax.set_xticklabels([str(i) for i in range(24)], rotation=0)
+
+    ax.set_xlabel("Hour of Day")
+    ax.set_ylabel("Day of Week")
+    ax.set_title("Aggregate Preferred Class Times")
     plt.tight_layout()
     plt.show()
 
+
 def main():
-    directory = "student_outputs"  # 修改为你保存.pkl文件的文件夹路径
+    directory = "student_outputs"
     counter = aggregate_schedule_data(directory)
     visualize_heatmap(counter)
 

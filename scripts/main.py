@@ -16,13 +16,15 @@ BEAM_WIDTH = 10
 def main():
     # Construct dictionary of permutations of states
     # course_codes = input("Enter courses you would like to enrol in, separated by commas: ").split(",")
-    course_codes = ["CS1101S"] # , "IS1108", "MA1521", "MA1522", "CS1231S"]
+    course_codes = ["ES1103", "CS2100", "CS3263", "CS3264"]
     courses = []
     for code in course_codes:
         code = code.upper()
         course = process_course(code)
+        print(course)
         courses.append(course)
     permutation_dict = {}
+    #return
     for course in courses:
         dict = {}
         lec_list = course.lectures
@@ -65,7 +67,7 @@ def main():
         while not beam_search.is_valid(state, permutation_dict, code_order):
             state = tuple(random.choice(domain[code]) for code in code_order)
         initial_states.append(state)
-    res = list(map(lambda x: beam_search.search(x, domain, permutation_dict, code_order, person_type="Hardworking",
+    res = list(map(lambda x: beam_search.search(x, domain, permutation_dict, code_order, person_type="Lazy",
                                                 beam_width=10, max_iterations=1000, 
                                                 initial_temperature=200.0, cooling_rate=0.95)[0], initial_states))
     res.sort(key=lambda x: x[1], reverse=True)
@@ -89,7 +91,7 @@ def main():
     output_dir = "student_outputs"
     os.makedirs(output_dir, exist_ok=True)
 
-    student_id = "e1234456"  
+    student_id = "5"  
     with open(f"{output_dir}/{student_id}_final_state.pkl", "wb") as f:
         pickle.dump(final_state, f)
 
