@@ -83,8 +83,3 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 - Inspired by research on RLHF and behaviour-aware educational planning.
 
 ---
-
-## Contact
-
-For questions or collaborations:  
-📧 Lou Zhanzhi: [e1313679@u.nus.edu](mailto:e1313679@u.nus.edu)
